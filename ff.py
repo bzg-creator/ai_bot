@@ -116,7 +116,6 @@ def get_plan_details_keyboard(plan_id: str):
 
 
 async def create_stripe_payment_link(plan_id: str, user_id: int) -> str:
-
     plan = PLANS[plan_id]
     try:
         session = stripe.checkout.Session.create(
@@ -147,42 +146,28 @@ async def create_stripe_payment_link(plan_id: str, user_id: int) -> str:
 
 
 async def handle_voice_message(message: types.Message):
-
     user_id = message.from_user.id
     subscription = user_subscriptions.get(user_id)
-
-
     if not subscription or subscription["status"] != "active":
         await message.answer(
             "❌ Для использования голосового помощника требуется активная подписка.",
             reply_markup=get_main_menu_keyboard(),
         )
         return
-
-
     voice = await bot.download(message.voice.file_id)
     audio_data = io.BytesIO(voice.getvalue())
-
     try:
-
         audio = AudioSegment.from_ogg(audio_data)
         wav_data = io.BytesIO()
         audio.export(wav_data, format="wav")
         wav_data.seek(0)
-
-
         recognizer = sr.Recognizer()
         with sr.AudioFile(wav_data) as source:
             audio_text = recognizer.listen(source)
             text = recognizer.recognize_google(audio_text, language="ru-RU")
-
-
         await message.answer(f"Вы сказали: {text}\nПравильно вас понял?")
-
-
         gemini_response = ask_gemini(text)
         await message.answer(f"Ответ: {gemini_response}")
-
     except sr.UnknownValueError:
         await message.answer("Не удалось распознать речь. Пожалуйста, повторите.")
     except Exception as e:
@@ -378,9 +363,31 @@ async def view_plans_callback(callback: types.CallbackQuery):
 
 
 @dp.message(F.voice)
-async def voice_message_handler(message: types.Message):
+async def handle_voice_message(message: types.Message):
+    user_id = message.from_user.id
+    subscription = user_subscriptions.get(user_id)
 
-    await handle_voice_message(message)
+    if not subscription or subscription["status"] != "active":
+        await message.answer("❌ Для использования голосового помощника требуется активная подписка.")
+        return
+
+    voice = await bot.download(message.voice.file_id)
+    audio_data = io.BytesIO(voice.getvalue())
+
+    try:
+        sound = AudioSegment.from_file(audio_data, format="ogg")
+        wav_data = io.BytesIO()
+        sound.export(wav_data, format="wav")
+
+        recognizer = sr.Recognizer()
+        with sr.AudioFile(wav_data) as source:
+            audio = recognizer.record(source)
+        text = recognizer.recognize_google(audio, language="ru-RU")
+
+        gemini_response = ask_gemini(text)
+        await message.answer(f"🤖 Ответ ИИ: {gemini_response}")
+    except Exception as e:
+        await message.answer("⚠️ Ошибка при обработке голоса.")
 
 
 async def main():
